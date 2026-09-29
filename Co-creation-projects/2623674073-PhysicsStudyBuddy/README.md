@@ -115,4 +115,8 @@ src/study_buddy/demo.py    牛顿第二定律离线示例
 tests/                     行为回归测试
 ```
 
+## 项目说明与反馈
+
+当前项目仍是演示版本。由于开发时间有限，如在使用过程中遇到问题，敬请包涵，并欢迎发送邮件至 [2623674073@qq.com](mailto:2623674073@qq.com) 反馈。
+
 作者：[@2623674073](https://github.com/2623674073) · [共创项目 PR #943](https://github.com/datawhalechina/hello-agents/pull/943)
