@@ -98,6 +98,12 @@ if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
 
 如果提示缺少 `LLM_MODEL_ID`、`LLM_BASE_URL` 或 `LLM_API_KEY`，检查 `.env` 是否位于本项目目录。若两次生成后仍报题目结构错误，说明模型未返回符合要求的完整题目；可以重试或先用 `--demo` 检查本地流程。搜索失败只会减少资源链接，不会丢失已完成的测验。
 
+## 演示结果
+
+![alt text](image.png)
+
+![alt text](image-1.png)
+
 ## 项目结构
 
 ```text
