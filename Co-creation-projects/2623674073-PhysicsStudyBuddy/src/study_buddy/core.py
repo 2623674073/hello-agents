@@ -48,6 +48,8 @@ def _now() -> str:
 def validate_quiz(questions: list[dict[str, Any]]) -> None:
     if not isinstance(questions, list) or len(questions) != 5:
         raise ValueError("诊断题必须恰好包含 5 题")
+    if any(not isinstance(q, dict) for q in questions):
+        raise ValueError("每道诊断题必须是对象")
     if [q.get("type") for q in questions].count("choice") != 3:
         raise ValueError("诊断题必须包含 3 道选择题")
     if [q.get("type") for q in questions].count("short") != 2:
@@ -76,6 +78,8 @@ def validate_quiz(questions: list[dict[str, Any]]) -> None:
 def validate_plan(tasks: list[dict[str, Any]]) -> None:
     if not isinstance(tasks, list) or not 3 <= len(tasks) <= 6:
         raise ValueError("计划必须包含 3 到 6 个任务")
+    if any(not isinstance(task, dict) for task in tasks):
+        raise ValueError("每项计划任务必须是对象")
     ids: set[str] = set()
     for task in tasks:
         for field in ("id", "title", "why", "done_when"):

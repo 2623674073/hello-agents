@@ -1,10 +1,13 @@
 """Behavior tests for the learning loop without model or network calls."""
 
+import copy
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from src.study_buddy.agents import _read_json
+from src.study_buddy.agents import HelloAgentsBackend, _normalize_quiz, _read_json
 from src.study_buddy.core import StudyBuddy, validate_quiz
 from src.study_buddy.demo import DemoBackend
 
@@ -18,6 +21,22 @@ STRONG = {"q1": "C", "q2": "B", "q3": "A",
 class FailingSearchBackend(DemoBackend):
     def search(self, query):
         raise RuntimeError("network unavailable")
+
+
+class FakeAgent:
+    name = "测试诊断智能体"
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+        self.clears = 0
+
+    def clear_history(self):
+        self.clears += 1
+
+    def run(self, prompt, **kwargs):
+        self.calls.append(kwargs)
+        return self.responses.pop(0)
 
 
 class StudyBuddyTests(unittest.TestCase):
@@ -67,6 +86,51 @@ class StudyBuddyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_quiz([{"id": "q1", "type": "choice"}])
         self.assertEqual(_read_json('```json\n{"grading":{"score":2}}\n```')["grading"]["score"], 2)
+
+    def test_model_list_options_are_normalized_and_invalid_labels_rejected(self):
+        quiz = copy.deepcopy(self.buddy.begin_quiz(self.session))
+        quiz[0]["options"] = [f"{letter}. {text}" for letter, text in quiz[0]["options"].items()]
+        quiz[1]["options"] = list(quiz[1]["options"].values())
+        _normalize_quiz(quiz)
+        self.assertEqual(set(quiz[0]["options"]), set("ABCD"))
+        self.assertEqual(quiz[1]["options"]["C"], "3 m/s²")
+        quiz[0]["options"] = ["A. a", "A. b", "C. c", "D. d"]
+        with self.assertRaisesRegex(ValueError, "重复"):
+            _normalize_quiz(quiz)
+
+    def test_structured_call_retries_bad_json_with_clean_history(self):
+        quiz = copy.deepcopy(self.buddy.begin_quiz(self.session))
+        quiz[0]["options"] = list(quiz[0]["options"].values())
+        agent = FakeAgent(['{"questions":', json.dumps({"questions": quiz}, ensure_ascii=False)])
+        backend = object.__new__(HelloAgentsBackend)
+        with patch.dict("os.environ", {"LLM_BASE_URL": "https://api.deepseek.com"}):
+            normalized = backend._json_call(agent, "请返回 JSON", "questions", _normalize_quiz)
+        self.assertEqual(len(normalized), 5)
+        self.assertEqual(set(normalized[0]["options"]), set("ABCD"))
+        self.assertEqual(agent.clears, 2)
+        self.assertEqual(agent.calls[0]["response_format"], {"type": "json_object"})
+        self.assertEqual(agent.calls[0]["extra_body"], {"reasoning_effort": "low"})
+
+    def test_other_provider_does_not_receive_deepseek_parameters(self):
+        agent = FakeAgent(['{"grading":{"score":2,"feedback":"完整"}}'])
+        backend = object.__new__(HelloAgentsBackend)
+        with patch.dict("os.environ", {"LLM_BASE_URL": "https://other-provider.example/v1"}):
+            result = backend._json_call(agent, "请返回 JSON", "grading")
+        self.assertEqual(result["score"], 2)
+        self.assertEqual(agent.calls, [{}])
+
+    def test_invalid_model_quiz_does_not_create_pending_attempt(self):
+        class InvalidQuizBackend(DemoBackend):
+            def make_quiz(self, context):
+                quiz = super().make_quiz(context)
+                quiz[0]["options"] = ["A", "B", "C"]
+                return quiz
+
+        buddy = StudyBuddy(InvalidQuizBackend(), Path(self.temp.name))
+        with self.assertRaises(ValueError):
+            buddy.begin_quiz(self.session)
+        restored = buddy.open("student", "物理", "牛顿第二定律")
+        self.assertIsNone(restored["pending_quiz"])
 
 
 if __name__ == "__main__":
